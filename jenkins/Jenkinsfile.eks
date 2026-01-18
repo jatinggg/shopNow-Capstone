@@ -112,10 +112,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ EKS cluster provisioned successfully"
+            echo "✅ EKS cluster provisioned successfully  !!!!!"
         }
         failure {
-            echo "❌ EKS provisioning failed"
+            echo "❌ EKS provisioning failed ...."
         }
         always {
             cleanWs()
