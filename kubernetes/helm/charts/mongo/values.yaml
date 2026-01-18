@@ -11,7 +11,8 @@ service:
 
 stateful:
   volume:
-    storageClassName: gp3-ssd
+    # storageClassName: gp3-ssd
+    storageClassName: "hostpath"
     storage: 5Gi
 
 resources:

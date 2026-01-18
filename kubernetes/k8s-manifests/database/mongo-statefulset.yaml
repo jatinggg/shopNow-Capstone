@@ -46,7 +46,8 @@ spec:
       name: mongo-pvc
     spec:
       accessModes: ["ReadWriteOnce"]
-      storageClassName: gp3-ssd
+      # storageClassName: gp3-ssd
+      storageClassName: hostpath
       resources:
         requests:
           storage: 5Gi
