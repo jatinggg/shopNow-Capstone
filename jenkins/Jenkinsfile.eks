@@ -39,7 +39,7 @@ pipeline {
                 ]) {
                     dir("${TF_DIR}") {
                         sh '''
-                          terraform init \
+                          terraform init -upgrade \
                             -backend-config="bucket=jatin-s3-shopnow-tfstate" \
                             -backend-config="key=terraform/terraform.tfstate" \
                             -backend-config="region=eu-west-2" \
