@@ -1,6 +1,6 @@
 resource "aws_security_group" "eks_cluster_sg" {
   vpc_id = var.vpc_id
-  name   = "eks_cluster_sg"
+  name   = "eks_cluster_sg01"
 
   ingress {
     from_port   = 443
