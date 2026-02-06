@@ -1,0 +1,382 @@
+---
+# Ansible Playbook: Jenkins Server Setup and Configuration
+# This playbook installs and configures tools required for CI/CD pipeline
+# Handles version checking, cleanup of incorrect versions, and fresh installations
+
+- name: Configure Jenkins Server with Required Tools
+  hosts: jenkins_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    kubectl_version: "v1.31.0"
+    terraform_version: "1.6.0"
+    helm_version: "v3.12.0"
+    aws_region: "eu-west-2"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - unzip
+          - git
+          - jq
+        state: present
+
+    #########################################
+    # DOCKER INSTALLATION WITH VERSION CHECK
+    #########################################
+    
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_check
+      failed_when: false
+      changed_when: false
+
+    - name: Display current Docker version (if installed)
+      debug:
+        msg: "Docker currently installed: {{ docker_check.stdout }}"
+      when: docker_check.rc == 0
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install or update Docker CE
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+
+    - name: Add jenkins user to docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
+      ignore_errors: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_final_version
+      changed_when: false
+
+    - name: Display final Docker version
+      debug:
+        msg: "✅ Docker installed: {{ docker_final_version.stdout }}"
+
+    #########################################
+    # AWS CLI v2 WITH VERSION CHECK
+    #########################################
+
+    - name: Check if AWS CLI is installed
+      command: aws --version
+      register: aws_check
+      failed_when: false
+      changed_when: false
+
+    - name: Parse AWS CLI version
+      set_fact:
+        aws_cli_version: "{{ aws_check.stdout.split('/')[1].split(' ')[0] if aws_check.rc == 0 else 'none' }}"
+
+    - name: Display current AWS CLI version
+      debug:
+        msg: "AWS CLI currently installed: {{ aws_cli_version }}"
+      when: aws_check.rc == 0
+
+    - name: Check if AWS CLI v2 is installed (correct version)
+      set_fact:
+        aws_cli_v2_installed: "{{ aws_cli_version.startswith('2.') if aws_check.rc == 0 else false }}"
+
+    - name: Remove old AWS CLI v1 if present
+      block:
+        - name: Remove AWS CLI v1 via apt
+          apt:
+            name: awscli
+            state: absent
+          ignore_errors: yes
+
+        - name: Remove AWS CLI v1 pip installation
+          pip:
+            name: awscli
+            state: absent
+          ignore_errors: yes
+      when: aws_check.rc == 0 and not aws_cli_v2_installed
+
+    - name: Download AWS CLI v2
+      get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/awscliv2.zip
+        mode: '0644'
+      when: not aws_cli_v2_installed
+
+    - name: Unzip AWS CLI v2
+      unarchive:
+        src: /tmp/awscliv2.zip
+        dest: /tmp
+        remote_src: yes
+      when: not aws_cli_v2_installed
+
+    - name: Install or update AWS CLI v2
+      command: /tmp/aws/install --update
+      when: not aws_cli_v2_installed
+
+    - name: Cleanup AWS CLI installation files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/awscliv2.zip
+        - /tmp/aws
+      when: not aws_cli_v2_installed
+
+    - name: Verify AWS CLI installation
+      command: aws --version
+      register: aws_final_version
+      changed_when: false
+
+    - name: Display final AWS CLI version
+      debug:
+        msg: "✅ AWS CLI installed: {{ aws_final_version.stdout }}"
+
+    #########################################
+    # KUBECTL WITH VERSION CHECK
+    #########################################
+
+    - name: Check if kubectl is installed
+      command: kubectl version --client --output=json
+      register: kubectl_check
+      failed_when: false
+      changed_when: false
+
+    - name: Parse kubectl version
+      set_fact:
+        kubectl_current_version: "{{ (kubectl_check.stdout | from_json).clientVersion.gitVersion if kubectl_check.rc == 0 else 'none' }}"
+      when: kubectl_check.rc == 0
+
+    - name: Display current kubectl version
+      debug:
+        msg: "kubectl currently installed: {{ kubectl_current_version }}"
+      when: kubectl_check.rc == 0
+
+    - name: Check if kubectl version matches
+      set_fact:
+        kubectl_version_matches: "{{ kubectl_current_version == kubectl_version if kubectl_check.rc == 0 else false }}"
+
+    - name: Remove old kubectl if version mismatch
+      file:
+        path: /usr/local/bin/kubectl
+        state: absent
+      when: kubectl_check.rc == 0 and not kubectl_version_matches
+
+    - name: Download kubectl {{ kubectl_version }}
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+      when: kubectl_check.rc != 0 or not kubectl_version_matches
+
+    - name: Verify kubectl installation
+      command: kubectl version --client
+      register: kubectl_final_version
+      changed_when: false
+
+    - name: Display final kubectl version
+      debug:
+        msg: "✅ kubectl installed: {{ kubectl_final_version.stdout }}"
+
+    #########################################
+    # TERRAFORM WITH VERSION CHECK
+    #########################################
+
+    - name: Check if Terraform is installed
+      command: terraform version -json
+      register: terraform_check
+      failed_when: false
+      changed_when: false
+
+    - name: Parse Terraform version
+      set_fact:
+        terraform_current_version: "{{ (terraform_check.stdout | from_json).terraform_version if terraform_check.rc == 0 else 'none' }}"
+      when: terraform_check.rc == 0
+
+    - name: Display current Terraform version
+      debug:
+        msg: "Terraform currently installed: {{ terraform_current_version }}"
+      when: terraform_check.rc == 0
+
+    - name: Check if Terraform version matches
+      set_fact:
+        terraform_version_matches: "{{ terraform_current_version == terraform_version if terraform_check.rc == 0 else false }}"
+
+    - name: Remove old Terraform if version mismatch
+      file:
+        path: /usr/local/bin/terraform
+        state: absent
+      when: terraform_check.rc == 0 and not terraform_version_matches
+
+    - name: Download Terraform {{ terraform_version }}
+      get_url:
+        url: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip"
+        dest: /tmp/terraform.zip
+        mode: '0644'
+      when: terraform_check.rc != 0 or not terraform_version_matches
+
+    - name: Unzip Terraform
+      unarchive:
+        src: /tmp/terraform.zip
+        dest: /usr/local/bin
+        remote_src: yes
+        mode: '0755'
+      when: terraform_check.rc != 0 or not terraform_version_matches
+
+    - name: Cleanup Terraform installation file
+      file:
+        path: /tmp/terraform.zip
+        state: absent
+      when: terraform_check.rc != 0 or not terraform_version_matches
+
+    - name: Verify Terraform installation
+      command: terraform version
+      register: terraform_final_version
+      changed_when: false
+
+    - name: Display final Terraform version
+      debug:
+        msg: "✅ Terraform installed: {{ terraform_final_version.stdout }}"
+
+    #########################################
+    # HELM WITH VERSION CHECK
+    #########################################
+
+    - name: Check if Helm is installed
+      command: helm version --template='{{.Version}}'
+      register: helm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Display current Helm version
+      debug:
+        msg: "Helm currently installed: {{ helm_check.stdout }}"
+      when: helm_check.rc == 0
+
+    - name: Check if Helm version matches
+      set_fact:
+        helm_version_matches: "{{ helm_check.stdout == helm_version if helm_check.rc == 0 else false }}"
+
+    - name: Remove old Helm if version mismatch
+      file:
+        path: /usr/local/bin/helm
+        state: absent
+      when: helm_check.rc == 0 and not helm_version_matches
+
+    - name: Download Helm installation script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get_helm.sh
+        mode: '0755'
+      when: helm_check.rc != 0 or not helm_version_matches
+
+    - name: Install Helm
+      command: /tmp/get_helm.sh
+      environment:
+        DESIRED_VERSION: "{{ helm_version }}"
+      when: helm_check.rc != 0 or not helm_version_matches
+
+    - name: Cleanup Helm installation script
+      file:
+        path: /tmp/get_helm.sh
+        state: absent
+      when: helm_check.rc != 0 or not helm_version_matches
+
+    - name: Verify Helm installation
+      command: helm version
+      register: helm_final_version
+      changed_when: false
+
+    - name: Display final Helm version
+      debug:
+        msg: "✅ Helm installed: {{ helm_final_version.stdout }}"
+
+    #########################################
+    # POST-INSTALLATION CONFIGURATION
+    #########################################
+
+    - name: Create .aws directory for jenkins user
+      file:
+        path: /var/lib/jenkins/.aws
+        state: directory
+        owner: jenkins
+        group: jenkins
+        mode: '0755'
+      ignore_errors: yes
+
+    - name: Create .kube directory for jenkins user
+      file:
+        path: /var/lib/jenkins/.kube
+        state: directory
+        owner: jenkins
+        group: jenkins
+        mode: '0755'
+      ignore_errors: yes
+
+    #########################################
+    # FINAL SUMMARY
+    #########################################
+
+    - name: Display installation summary
+      debug:
+        msg:
+          - "╔════════════════════════════════════════════════════════════╗"
+          - "║          ✅ Jenkins Server Configuration Complete          ║"
+          - "╚════════════════════════════════════════════════════════════╝"
+          - ""
+          - "📦 Installed Tools:"
+          - "  ✓ Docker:     {{ docker_final_version.stdout }}"
+          - "  ✓ AWS CLI:    {{ aws_final_version.stdout }}"
+          - "  ✓ kubectl:    {{ kubectl_version }}"
+          - "  ✓ Terraform:  {{ terraform_version }}"
+          - "  ✓ Helm:       {{ helm_version }}"
+          - ""
+          - "🔧 Next Steps:"
+          - "  1. Restart Jenkins to apply docker group permissions:"
+          - "     sudo systemctl restart jenkins"
+          - ""
+          - "  2. Configure AWS credentials (as jenkins user):"
+          - "     sudo su - jenkins"
+          - "     aws configure"
+          - ""
+          - "  3. Configure kubectl for EKS:"
+          - "     aws eks update-kubeconfig --region {{ aws_region }} --name <cluster-name>"
+          - ""
+          - "  4. Verify installations (as jenkins user):"
+          - "     docker ps"
+          - "     aws sts get-caller-identity"
+          - "     kubectl version --client"
+          - "     terraform version"
+          - "     helm version"

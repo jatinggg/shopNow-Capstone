@@ -2,48 +2,56 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION   = "eu-west-2"
-        TF_DIR       = "eks-tf"
-        CLUSTER_NAME = "jatin-shopnow-cluster"
+        AWS_REGION   = 'eu-west-2'
+        TF_DIR       = 'eks-tf'
+        CLUSTER_NAME = 'jatin-shopnow-cluster'
+        S3_BUCKET    = 'jatin-s3-shopnow-tfstate'
+        DYNAMODB_TABLE = 'jatin-shopnow-statelock'
     }
 
     options {
         timestamps()
         disableConcurrentBuilds()
+        timeout(time: 60, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
 
-        stage('Checkout Source') {
+        stage('Checkout') {
             steps {
+                echo '📥 Checking out source code...'
                 checkout scm
             }
         }
 
-        stage('Configure AWS Credentials') {
+        stage('Verify AWS Access') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'AWS_CRED_ID']
-                ]) {
-                    sh 'aws sts get-caller-identity'
+                script {
+                    echo '🔐 Verifying AWS credentials (via IAM role)...'
+                    sh '''
+                        # Verify IAM role is attached
+                        aws sts get-caller-identity
+                        
+                        # Get AWS Account ID
+                        export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                        echo "AWS Account ID: ${AWS_ACCOUNT_ID}"
+                    '''
                 }
             }
         }
 
         stage('Terraform Init') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'AWS_CRED_ID']
-                ]) {
+                script {
+                    echo '🔧 Initializing Terraform...'
                     dir("${TF_DIR}") {
                         sh '''
-                          terraform init -upgrade \
-                            -backend-config="bucket=jatin-s3-shopnow-tfstate" \
-                            -backend-config="key=terraform/terraform.tfstate" \
-                            -backend-config="region=eu-west-2" \
-                            -backend-config="dynamodb_table=jatin-shopnow-statelock"
+                            terraform init -upgrade \
+                                -backend-config="bucket=${S3_BUCKET}" \
+                                -backend-config="key=eks/terraform.tfstate" \
+                                -backend-config="region=${AWS_REGION}" \
+                                -backend-config="dynamodb_table=${DYNAMODB_TABLE}"
                         '''
                     }
                 }
@@ -52,59 +60,105 @@ pipeline {
 
         stage('Terraform Validate') {
             steps {
-                dir("${TF_DIR}") {
-                    sh 'terraform validate'
+                script {
+                    echo '✅ Validating Terraform configuration...'
+                    dir("${TF_DIR}") {
+                        sh 'terraform validate'
+                    }
                 }
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'AWS_CRED_ID']
-                ]) {
+                script {
+                    echo '📋 Creating Terraform execution plan...'
                     dir("${TF_DIR}") {
                         sh '''
-                          terraform plan \
-                            -var-file="demo.tfvars" \
-                            -out=tfplan
+                            terraform plan \
+                                -var-file="demo.tfvars" \
+                                -out=tfplan
+                            
+                            # Show plan summary
+                            echo ""
+                            echo "Plan created successfully. Review changes above."
+                            echo ""
                         '''
                     }
                 }
             }
         }
 
-        stage('Terraform Apply') {
+        stage('Manual Approval') {
             input {
-                message "Approve EKS Cluster Provisioning?"
-                ok "Apply"
+                message "Review the Terraform plan above. Apply these infrastructure changes?"
+                ok "Apply Changes"
+                submitter "admin"
             }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'AWS_CRED_ID']
-                ]) {
+                echo '✅ Changes approved. Proceeding with apply...'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                script {
+                    echo '🚀 Applying Terraform changes...'
                     dir("${TF_DIR}") {
-                        sh 'terraform apply -auto-approve tfplan'
+                        sh '''
+                            terraform apply -auto-approve tfplan
+                            
+                            echo ""
+                            echo "Terraform apply completed!"
+                        '''
                     }
                 }
             }
         }
 
-        stage('Update kubeconfig & Verify Cluster') {
+        stage('Update Kubeconfig') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding',
-                     credentialsId: 'AWS_CRED_ID']
-                ]) {
+                script {
+                    echo '☸️  Updating kubeconfig for EKS cluster...'
                     sh '''
-                      aws eks update-kubeconfig \
-                        --region ${AWS_REGION} \
-                        --name ${CLUSTER_NAME}
-
-                      kubectl get nodes
+                        aws eks update-kubeconfig \
+                            --region ${AWS_REGION} \
+                            --name ${CLUSTER_NAME}
                     '''
+                }
+            }
+        }
+
+        stage('Verify Cluster') {
+            steps {
+                script {
+                    echo '🔍 Verifying EKS cluster status...'
+                    sh '''
+                        echo "Cluster nodes:"
+                        kubectl get nodes
+                        
+                        echo ""
+                        echo "Cluster info:"
+                        kubectl cluster-info
+                        
+                        echo ""
+                        echo "Existing namespaces:"
+                        kubectl get namespaces
+                    '''
+                }
+            }
+        }
+
+        stage('Save Terraform Outputs') {
+            steps {
+                script {
+                    echo '💾 Saving Terraform outputs...'
+                    dir("${TF_DIR}") {
+                        sh '''
+                            terraform output -json > terraform-outputs.json
+                            cat terraform-outputs.json
+                        '''
+                    }
                 }
             }
         }
@@ -112,13 +166,40 @@ pipeline {
 
     post {
         success {
-            echo "✅ EKS cluster provisioned successfully  !!!!!"
+            echo "═══════════════════════════════════════════════════════"
+            echo "✅ EKS Infrastructure Pipeline - SUCCESS"
+            echo "═══════════════════════════════════════════════════════"
+            echo ""
+            echo "Cluster Name: ${CLUSTER_NAME}"
+            echo "Region: ${AWS_REGION}"
+            echo ""
+            echo "Next steps:"
+            echo "  1. Verify cluster: kubectl get nodes"
+            echo "  2. Deploy applications using CI/CD pipelines"
+            echo ""
         }
         failure {
-            echo "❌ EKS provisioning failed ...."
+            echo "═══════════════════════════════════════════════════════"
+            echo "❌ EKS Infrastructure Pipeline - FAILED"
+            echo "═══════════════════════════════════════════════════════"
+            echo ""
+            echo "Check the logs above for error details."
+            echo "Common issues:"
+            echo "  - AWS IAM permissions"
+            echo "  - Terraform state lock"
+            echo "  - Resource quotas exceeded"
+            echo ""
         }
         always {
-            cleanWs()
+            script {
+                echo '🧹 Cleaning up workspace...'
+                dir("${TF_DIR}") {
+                    sh '''
+                        # Keep outputs but clean plan file
+                        rm -f tfplan
+                    '''
+                }
+            }
         }
     }
 }

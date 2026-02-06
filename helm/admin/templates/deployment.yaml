@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin
+  labels:
+    app: admin
+    app.kubernetes.io/name: admin
+    app.kubernetes.io/component: admin-panel
+    app.kubernetes.io/part-of: shopnow
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: admin
+      app.kubernetes.io/name: admin
+  template:
+    metadata:
+      labels:
+        app: admin
+        app.kubernetes.io/name: admin
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: admin
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.deployment.containerPort }}
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

@@ -12,6 +12,7 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+tfplan
 
 # IDE
 .vscode/
@@ -20,3 +21,90 @@ terraform.rc
 # OS
 .DS_Store
 Thumbs.db
+
+# SSH Keys and PEM files (NEVER commit these!)
+*.pem
+*.key
+.ssh/
+id_rsa*
+
+# ============================================
+# Documentation & Helper Files (Not Essential)
+# ============================================
+
+# Deployment checklist
+DEPLOYMENT-CHECKLIST.md
+SSH-SETUP-GUIDE.md
+CURRENT-STATUS.md
+
+# Ansible inventory (contains IP addresses)
+ansible/inventory/hosts.ini
+ansible/group_vars/all.yml
+
+# Documentation files
+docs/30GB-QUICK-REFERENCE.md
+docs/COST-OPTIMIZATION.md
+docs/DEPLOYMENT-GUIDE.md
+docs/HELM-QUICK-REFERENCE.md
+docs/IDEMPOTENCY-VERIFICATION.md
+docs/JENKINS-CICD-SETUP.md
+docs/JENKINS-IAM-PERMISSIONS.md
+docs/JENKINS-RESOURCE-OPTIMIZATION.md
+docs/NAMING-AUDIT-REPORT.md
+docs/QUICK-START.md
+docs/ROLLBACK-GUIDE.md
+docs/TERRAFORM-STATE-SETUP.md
+docs/TERRAFORM-UPDATE-GUIDE.md
+docs/TOOLS-SETUP-GUIDE.md
+docs/TROUBLESHOOTING.md
+docs/YOUR-QUICK-START.md
+
+# Keep essential architecture docs (comment out to ignore)
+# docs/APPLICATION-ARCHITECTURE.md
+# docs/ARCHITECTURE-EXPLAINED.md
+# docs/K8S-CONCEPTS.md
+
+# Helper scripts
+scripts/build-and-push.sh
+scripts/helm-rollback.sh
+scripts/optimize-jenkins-server.sh
+scripts/rollback.sh
+scripts/setup-jenkins-server.sh
+scripts/update-jenkins-ip.sh
+scripts/update-jenkins-ip.ps1
+
+# IAM policies (sensitive/temporary)
+iam-policies/
+
+# Ansible version management docs
+ansible/VERSION-MANAGEMENT.md
+
+# Old/deprecated Jenkinsfiles (keeping only CICD ones)
+jenkins/Jenkinsfile.ci.*
+jenkins/Jenkinsfile.cd.*
+
+# Jenkins artifacts (temporary)
+terraform-outputs.json
+*.log
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker build artifacts (temporary)
+.dockerignore
+
+# Kubernetes temp files
+*.kubeconfig
+kubeconfig
+
+# Build artifacts
+dist/
+build/
+
+# Environment files with secrets
+.env
+.env.local
+.env.*.local

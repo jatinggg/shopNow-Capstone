@@ -1,0 +1,33 @@
+# Default values for frontend service
+
+replicaCount: 2
+
+image:
+  repository: ""  # Will be set by Jenkins
+  tag: ""         # Will be set by Jenkins
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ecr-secret
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+deployment:
+  containerPort: 80
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 256Mi
+  requests:
+    cpu: 150m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80

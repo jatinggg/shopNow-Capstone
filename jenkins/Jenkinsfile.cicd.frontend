@@ -1,0 +1,201 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_REGION = 'eu-west-2'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REPOSITORY = 'jatin-capstone'
+        IMAGE_TAG = "${SERVICE_NAME}-${BUILD_NUMBER}"
+        K8S_NAMESPACE = 'shopnow-demo'
+        SERVICE_DIR = 'frontend'
+        SERVICE_NAME = 'frontend'
+    }
+    
+    options {
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+    }
+    
+    stages {
+        stage('Check for Changes') {
+            steps {
+                script {
+                    // Check if frontend directory has changes since last build
+                    def changes = sh(
+                        script: """
+                            if [ "\${GIT_PREVIOUS_COMMIT}" = "" ]; then
+                                echo "true"
+                            else
+                                git diff --name-only \${GIT_PREVIOUS_COMMIT} \${GIT_COMMIT} | grep "^${SERVICE_DIR}/" || echo "false"
+                            fi
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (changes == "false") {
+                        echo "⏭️  No changes in ${SERVICE_DIR}/ directory. Skipping build."
+                        currentBuild.result = 'NOT_BUILT'
+                        error("No changes detected - skipping pipeline")
+                    } else {
+                        echo "✅ Changes detected in ${SERVICE_DIR}/ directory. Proceeding with CI/CD."
+                    }
+                }
+            }
+        }
+        
+        stage('Initialize') {
+            steps {
+                script {
+                    // Get AWS account ID
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: 'aws sts get-caller-identity --query Account --output text',
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Set full image name with service-specific tags
+                    env.FULL_IMAGE_NAME = "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+                    env.LATEST_IMAGE_NAME = "${env.ECR_REGISTRY}/${env.ECR_REPOSITORY}:${env.SERVICE_NAME}-latest"
+                    
+                    echo "Image tags:"
+                    echo "  - Versioned: ${env.IMAGE_TAG}"
+                    echo "  - Latest: ${env.SERVICE_NAME}-latest"
+                    
+                    echo "🏗️  Building: ${env.FULL_IMAGE_NAME}"
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                dir("${SERVICE_DIR}") {
+                    script {
+                        echo "🐳 Building Docker image for ${SERVICE_NAME}..."
+                        sh """
+                            docker build \
+                                --build-arg NODE_ENV=production \
+                                -t ${SERVICE_NAME}:${BUILD_NUMBER} \
+                                .
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Tag for ECR') {
+            steps {
+                script {
+                    echo "🏷️  Tagging image for ECR..."
+                    sh """
+                        # Tag with build number (for rollback)
+                        docker tag ${SERVICE_NAME}:${BUILD_NUMBER} ${FULL_IMAGE_NAME}
+                        
+                        # Tag as latest (for easy reference)
+                        docker tag ${SERVICE_NAME}:${BUILD_NUMBER} ${LATEST_IMAGE_NAME}
+                    """
+                }
+            }
+        }
+        
+        stage('Push to ECR') {
+            steps {
+                script {
+                    echo "📤 Pushing to ECR..."
+                    sh """
+                        # Login to ECR
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        
+                        # Push images
+                        docker push ${FULL_IMAGE_NAME}
+                        docker push ${LATEST_IMAGE_NAME}
+                    """
+                }
+            }
+        }
+        
+        stage('Deploy with Helm') {
+            steps {
+                script {
+                    echo "☸️  Deploying ${SERVICE_NAME} using Helm..."
+                    
+                    // Update kubeconfig for EKS
+                    sh """
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name \$(aws eks list-clusters --region ${AWS_REGION} --query 'clusters[0]' --output text)
+                    """
+                    
+                    // Create namespace if doesn't exist
+                    sh """
+                        kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                    """
+                    
+                    // Recreate ECR secret (expires after 12 hours)
+                    sh """
+                        kubectl delete secret ecr-secret -n ${K8S_NAMESPACE} --ignore-not-found
+                        kubectl create secret docker-registry ecr-secret \
+                            --docker-server=${ECR_REGISTRY} \
+                            --docker-username=AWS \
+                            --docker-password=\$(aws ecr get-login-password --region ${AWS_REGION}) \
+                            --namespace=${K8S_NAMESPACE}
+                    """
+                    
+                    // Deploy using Helm
+                    sh """
+                        helm upgrade --install ${SERVICE_NAME} ./helm/${SERVICE_DIR}/ \
+                            --namespace ${K8S_NAMESPACE} \
+                            --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \
+                            --set image.tag=${IMAGE_TAG} \
+                            --wait \
+                            --timeout 5m \
+                            --atomic
+                    """
+                    
+                    echo "✅ Helm deployment complete!"
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    echo "✅ Verifying deployment..."
+                    
+                    // Show Helm release status
+                    sh """
+                        helm status ${SERVICE_NAME} -n ${K8S_NAMESPACE}
+                    """
+                    
+                    // Get pod status
+                    sh """
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=${SERVICE_NAME}
+                    """
+                    
+                    // Check if pods are ready
+                    sh """
+                        kubectl wait --for=condition=ready pod \
+                            -l app=${SERVICE_NAME} \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=3m
+                    """
+                    
+                    echo "🎉 Deployment successful!"
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo "✅ CI/CD Pipeline completed successfully for ${SERVICE_NAME}!"
+            echo "📦 Image: ${FULL_IMAGE_NAME}"
+            echo "☸️  Deployed to: ${K8S_NAMESPACE}"
+        }
+        
+        failure {
+            echo "❌ CI/CD Pipeline failed for ${SERVICE_NAME}"
+        }
+        
+        aborted {
+            echo "⏹️  CI/CD Pipeline aborted for ${SERVICE_NAME}"
+        }
+    }
+}
