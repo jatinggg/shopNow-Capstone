@@ -119,12 +119,22 @@ pipeline {
         stage('Update Kubeconfig') {
             steps {
                 script {
-                    echo '☸️  Updating kubeconfig for EKS cluster...'
-                    sh '''
-                        aws eks update-kubeconfig \
-                            --region ${AWS_REGION} \
-                            --name ${CLUSTER_NAME}
-                    '''
+                    echo "📝 Updating kubeconfig for EKS cluster..."
+                    dir("${TF_DIR}") {
+                        // Get cluster name from Terraform output
+                        def clusterName = sh(
+                            script: "terraform output -raw cluster_name",
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "Cluster name: ${clusterName}"
+                        
+                        sh """
+                            aws eks update-kubeconfig \\
+                                --region ${env.AWS_DEFAULT_REGION} \\
+                                --name ${clusterName}
+                        """
+                    }
                 }
             }
         }
