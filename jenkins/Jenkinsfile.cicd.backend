@@ -129,8 +129,7 @@ pipeline {
                             helm install mongodb bitnami/mongodb \\
                                 --namespace ${K8S_NAMESPACE} \\
                                 --set auth.enabled=false \\
-                                --set persistence.enabled=true \\
-                                --set persistence.size=10Gi \\
+                                --set persistence.enabled=false \\
                                 --wait --timeout 5m
                             
                             echo "✅ MongoDB deployed successfully"
