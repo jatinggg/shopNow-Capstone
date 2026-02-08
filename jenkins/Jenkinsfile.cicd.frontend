@@ -6,7 +6,7 @@ pipeline {
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         ECR_REPOSITORY = 'jatin-capstone'
         IMAGE_TAG = "${SERVICE_NAME}-${BUILD_NUMBER}"
-        K8S_NAMESPACE = 'shopnow-demo'
+        K8S_NAMESPACE = 'default'
         SERVICE_DIR = 'frontend'
         SERVICE_NAME = 'frontend'
     }

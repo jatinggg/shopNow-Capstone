@@ -6,7 +6,7 @@ pipeline {
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         ECR_REPOSITORY = 'jatin-capstone'
         IMAGE_TAG = "${SERVICE_NAME}-${BUILD_NUMBER}"
-        K8S_NAMESPACE = 'shopnow-demo'
+        K8S_NAMESPACE = 'default'
         SERVICE_DIR = 'backend'
         SERVICE_NAME = 'backend'
     }
@@ -109,6 +109,36 @@ pipeline {
                         docker push ${FULL_IMAGE_NAME}
                         docker push ${LATEST_IMAGE_NAME}
                     """
+                }
+            }
+        }
+        
+        stage('Ensure MongoDB') {
+            steps {
+                script {
+                    echo '🗄️  Ensuring MongoDB is deployed...'
+                    sh '''
+                        # Check if MongoDB is already deployed
+                        if helm list -n ${K8S_NAMESPACE} | grep -q mongodb; then
+                            echo "✅ MongoDB already exists"
+                        else
+                            echo "📦 Deploying MongoDB..."
+                            helm repo add bitnami https://charts.bitnami.com/bitnami || true
+                            helm repo update
+                            
+                            helm install mongodb bitnami/mongodb \\
+                                --namespace ${K8S_NAMESPACE} \\
+                                --set auth.enabled=false \\
+                                --set persistence.enabled=true \\
+                                --set persistence.size=10Gi \\
+                                --wait --timeout 5m
+                            
+                            echo "✅ MongoDB deployed successfully"
+                        fi
+                        
+                        # Verify MongoDB is ready
+                        kubectl get pods -l app.kubernetes.io/name=mongodb -n ${K8S_NAMESPACE}
+                    '''
                 }
             }
         }
