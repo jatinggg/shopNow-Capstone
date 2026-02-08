@@ -11,12 +11,10 @@ RUN apk add --no-cache python3 make g++ || true
 COPY package*.json ./
 RUN npm ci --no-audit --prefer-offline
 
+
 COPY . .
-# Build argument for dynamic user path
-ARG USER_NAME=aryan
-ENV PUBLIC_URL=/${USER_NAME}-admin
-ENV REACT_APP_API_BASE_URL=/${USER_NAME}-admin/api
 RUN npm run build
+
 
 ############################
 # Stage 2: Runtime (nginx)
