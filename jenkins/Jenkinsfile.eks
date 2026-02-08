@@ -89,16 +89,7 @@ pipeline {
             }
         }
 
-        stage('Manual Approval') {
-            input {
-                message "Review the Terraform plan above. Apply these infrastructure changes?"
-                ok "Apply Changes"
-                submitter "admin"
-            }
-            steps {
-                echo '✅ Changes approved. Proceeding with apply...'
-            }
-        }
+
 
         stage('Terraform Apply') {
             steps {
