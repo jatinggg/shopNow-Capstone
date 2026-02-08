@@ -1,6 +1,7 @@
 # admin/Dockerfile
 ############################
 # Stage 1: Build
+# adding comment to trigger pipeline build
 ############################
 FROM node:18-alpine AS builder
 WORKDIR /app
