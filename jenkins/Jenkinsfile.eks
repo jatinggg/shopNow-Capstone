@@ -47,7 +47,7 @@ pipeline {
                     echo '🔧 Initializing Terraform...'
                     dir("${TF_DIR}") {
                         sh '''
-                            terraform init -upgrade \
+                            terraform init -upgrade -reconfigure \
                                 -backend-config="bucket=${S3_BUCKET}" \
                                 -backend-config="key=eks/terraform.tfstate" \
                                 -backend-config="region=${AWS_REGION}" \
