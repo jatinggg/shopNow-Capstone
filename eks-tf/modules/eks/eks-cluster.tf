@@ -79,9 +79,11 @@ resource "aws_eks_addon" "kube-proxy" {
   depends_on    = [aws_eks_node_group.main]
 }
 
-resource "aws_ec2_tag" "subnet_for_aws_lbc" {
-  for_each    = toset(var.subnet_ids)
-  resource_id = each.value
-  key         = "kubernetes.io/role/elb"
-  value       = "1"
-}
+# COMMENTED OUT: This causes Terraform for_each error when subnet_ids are not known at plan time
+# Tags for ELB are already applied in the VPC module's subnet resources
+# resource "aws_ec2_tag" "subnet_for_aws_lbc" {
+#   for_each    = toset(var.subnet_ids)
+#   resource_id = each.value
+#   key         = "kubernetes.io/role/elb"
+#   value       = "1"
+# }
