@@ -20,6 +20,7 @@ module "eks" {
   subnet_ids        = module.vpc.private_subnet_ids
   vpc_cni_role_name = var.vpc_cni_role_name
   aws_lbc_role_name = var.aws_lbc_role_name
+  environment       = var.environment
   tags              = var.tags
   region            = var.region
 
