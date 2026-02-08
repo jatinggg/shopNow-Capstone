@@ -145,7 +145,7 @@ pipeline {
                             --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \
                             --set image.tag=${IMAGE_TAG} \
                             --wait \
-                            --timeout 5m \
+                            --timeout 15m \
                             --atomic
                     """
                     

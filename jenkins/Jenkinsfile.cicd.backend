@@ -130,7 +130,7 @@ pipeline {
                                 --namespace ${K8S_NAMESPACE} \\
                                 --set auth.enabled=false \\
                                 --set persistence.enabled=false \\
-                                --wait --timeout 5m
+                                --wait --timeout 15m
                             
                             echo "✅ MongoDB deployed successfully"
                         fi
@@ -174,7 +174,7 @@ pipeline {
                             --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \
                             --set image.tag=${IMAGE_TAG} \
                             --wait \
-                            --timeout 5m \
+                            --timeout 15m \
                             --atomic
                     """
                     
