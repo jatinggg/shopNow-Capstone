@@ -1,3 +1,4 @@
+//added test comment to trigger pipleine build
 // server.js
 const express = require('express');
 const mongoose = require('mongoose');
@@ -27,8 +28,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/shopnow',
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 
 // MongoDB Schemas
@@ -59,8 +60,8 @@ const invoiceSchema = new mongoose.Schema({
     image: String
   }],
   total: { type: Number, required: true },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: ['pending', 'ready', 'collected', 'cancelled'],
     default: 'pending'
   },
@@ -185,12 +186,12 @@ app.get('/api/products', async (req, res) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
     let query = {};
-    
+
     // Category filter
     if (category && category !== 'all') {
       query.category = category;
     }
-    
+
     // Search filter
     if (search) {
       query.$or = [
@@ -198,14 +199,14 @@ app.get('/api/products', async (req, res) => {
         { description: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const products = await Product.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
-    
+
     const total = await Product.countDocuments(query);
-    
+
     res.json({
       products,
       totalPages: Math.ceil(total / limit),
@@ -271,31 +272,31 @@ app.delete('/api/products/:id', async (req, res) => {
 app.post('/api/invoices', async (req, res) => {
   try {
     const { customerDetails, items, total } = req.body;
-    
+
     // Validate required fields
     if (!customerDetails.name || !customerDetails.phone || !items || !total) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: customerDetails.name, customerDetails.phone, items, total' 
+      return res.status(400).json({
+        error: 'Missing required fields: customerDetails.name, customerDetails.phone, items, total'
       });
     }
-    
+
     // Generate unique invoice number and token
     let invoiceNumber, token;
     let isUnique = false;
-    
+
     while (!isUnique) {
       invoiceNumber = generateInvoiceNumber();
       token = generateToken().toString();
-      
+
       const existingInvoice = await Invoice.findOne({
         $or: [{ invoiceNumber }, { token }]
       });
-      
+
       if (!existingInvoice) {
         isUnique = true;
       }
     }
-    
+
     // Create invoice
     const invoice = new Invoice({
       invoiceNumber,
@@ -307,9 +308,9 @@ app.post('/api/invoices', async (req, res) => {
       paymentMethod: 'Cash on Delivery',
       paymentStatus: 'pending'
     });
-    
+
     await invoice.save();
-    
+
     // Update product stock
     for (const item of items) {
       await Product.findByIdAndUpdate(
@@ -317,7 +318,7 @@ app.post('/api/invoices', async (req, res) => {
         { $inc: { stock: -item.quantity } }
       );
     }
-    
+
     res.status(201).json({
       success: true,
       invoice,
@@ -330,29 +331,29 @@ app.post('/api/invoices', async (req, res) => {
 
 app.get('/api/invoices', async (req, res) => {
   try {
-    const { 
-      status, 
-      paymentStatus, 
-      token, 
-      invoiceNumber, 
-      page = 1, 
-      limit = 20 
+    const {
+      status,
+      paymentStatus,
+      token,
+      invoiceNumber,
+      page = 1,
+      limit = 20
     } = req.query;
-    
+
     let query = {};
-    
+
     if (status) query.status = status;
     if (paymentStatus) query.paymentStatus = paymentStatus;
     if (token) query.token = token;
     if (invoiceNumber) query.invoiceNumber = invoiceNumber;
-    
+
     const invoices = await Invoice.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
-    
+
     const total = await Invoice.countDocuments(query);
-    
+
     res.json({
       invoices,
       totalPages: Math.ceil(total / limit),
@@ -392,25 +393,25 @@ app.put('/api/invoices/:id/status', async (req, res) => {
   try {
     const { status, paymentStatus } = req.body;
     const updateData = {};
-    
+
     if (status) updateData.status = status;
     if (paymentStatus) updateData.paymentStatus = paymentStatus;
-    
+
     // If status is being changed to 'collected', set collectedAt timestamp
     if (status === 'collected') {
       updateData.collectedAt = new Date();
     }
-    
+
     const invoice = await Invoice.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
     );
-    
+
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
-    
+
     res.json({
       success: true,
       invoice,
@@ -432,11 +433,11 @@ app.put('/api/invoices/token/:token/collect', async (req, res) => {
       },
       { new: true, runValidators: true }
     );
-    
+
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found with this token' });
     }
-    
+
     res.json({
       success: true,
       invoice,
@@ -466,7 +467,7 @@ app.get('/api/users/:email/orders', async (req, res) => {
     const invoices = await Invoice.find({
       'customerDetails.email': req.params.email
     }).sort({ createdAt: -1 });
-    
+
     res.json(invoices);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -498,7 +499,7 @@ app.get('/api/analytics/dashboard', async (req, res) => {
         }
       })
     ]);
-    
+
     res.json({
       totalOrders,
       pendingOrders,
@@ -527,7 +528,7 @@ app.post('/api/seed/products', async (req, res) => {
   try {
     // Clear existing products
     await Product.deleteMany({});
-    
+
     const sampleProducts = [
       {
         name: 'Wireless Headphones',
@@ -584,7 +585,7 @@ app.post('/api/seed/products', async (req, res) => {
         stock: 100
       }
     ];
-    
+
     await Product.insertMany(sampleProducts);
     res.json({ message: 'Products seeded successfully', count: sampleProducts.length });
   } catch (error) {
