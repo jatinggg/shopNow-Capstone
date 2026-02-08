@@ -1,7 +1,12 @@
 # IAM role and policy for EKS Cluster
 
+# Generate random suffix to avoid name conflicts
+resource "random_id" "suffix" {
+  byte_length = 4
+}
+
 resource "aws_iam_role" "eks_cluster_role" {
-  name = "${var.cluster_name}-eks-cluster-role"
+  name = "${var.cluster_name}-eks-cluster-role-${random_id.suffix.hex}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -24,7 +29,7 @@ resource "aws_iam_role_policy_attachment" "AmazonEKSClusterPolicy" {
 
 # Create IAM role for EKS Node Group
 resource "aws_iam_role" "eks_node_role" {
-  name = "${var.cluster_name}-node-role"
+  name = "${var.cluster_name}-node-role-${random_id.suffix.hex}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -94,7 +99,7 @@ data "aws_iam_policy_document" "vpc_cni_assume_role_policy" {
 
 resource "aws_iam_role" "vpc_cni" {
   assume_role_policy = data.aws_iam_policy_document.vpc_cni_assume_role_policy.json
-  name               = var.vpc_cni_role_name
+  name               = "AmazonEKSVPCCNIRole-${var.cluster_name}-${random_id.suffix.hex}"
 }
 
 resource "aws_iam_role_policy_attachment" "vpc_cni" {
@@ -130,7 +135,7 @@ data "aws_iam_policy_document" "ebs_csi_assume_role_policy" {
 
 resource "aws_iam_role" "ebs_csi" {
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role_policy.json
-  name               = "AmazonEKS_EBS_CSI_DriverRole"
+  name               = "AmazonEKS_EBS_CSI_DriverRole-${random_id.suffix.hex}"
 }
 
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
@@ -144,7 +149,7 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
 # IAM role and policy for AWS Load Balancer Controller
 
 resource "aws_iam_policy" "aws_load_balancer_controller_policy" {
-  name   = "aws-lbc-policy-demo-02"
+  name   = "aws-lbc-policy-${var.environment}-${random_id.suffix.hex}"
   policy = file("${path.module}/policies/aws_load_balancer_controller_policy.json")
 }
 
@@ -174,7 +179,7 @@ data "aws_iam_policy_document" "aws_load_balancer_controller_role_policy" {
 
 resource "aws_iam_role" "aws_load_balancer_controller" {
   assume_role_policy = data.aws_iam_policy_document.aws_load_balancer_controller_role_policy.json
-  name               = var.aws_lbc_role_name
+  name               = "aws-lbc-${var.cluster_name}-${random_id.suffix.hex}"
 }
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_policy" {

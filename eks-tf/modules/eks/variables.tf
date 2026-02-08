@@ -29,6 +29,7 @@ variable "tags" {
   type        = map(string)
 }
 
+
 variable "vpc_cni_role_name" {
   description = "VPC CNI Role Name"
   type        = string
@@ -36,5 +37,10 @@ variable "vpc_cni_role_name" {
 
 variable "aws_lbc_role_name" {
   description = "AWS Load Balancer controller Role Name"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment name (e.g., demo, prod)"
   type        = string
 }
