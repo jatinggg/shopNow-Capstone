@@ -1,6 +1,7 @@
 # frontend/Dockerfile
 ############################
 # Stage 1: Build the app
+# Adding comment to trigger piepline build.
 ############################
 FROM node:18-alpine AS builder
 LABEL org.opencontainers.image.description="shopNow frontend - build stage"
