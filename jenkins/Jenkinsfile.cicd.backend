@@ -20,24 +20,25 @@ pipeline {
         stage('Check for Changes') {
             steps {
                 script {
-                    // Check if backend directory has changes since last build
+                    echo '🔍 Checking for changes in backend/ or helm/backend/ directories...'
+                    
                     def changes = sh(
-                        script: """
-                            if [ "\${GIT_PREVIOUS_COMMIT}" = "" ]; then
+                        script: '''
+                            if [ "${GIT_PREVIOUS_COMMIT}" = "" ]; then
                                 echo "true"
                             else
-                                git diff --name-only \${GIT_PREVIOUS_COMMIT} \${GIT_COMMIT} | grep "^${SERVICE_DIR}/" || echo "false"
+                                git diff --name-only ${GIT_PREVIOUS_COMMIT} ${GIT_COMMIT} | grep -E "^(backend/|helm/backend/|jenkins/Jenkinsfile.cicd.backend)" || echo "false"
                             fi
-                        """,
+                        ''',
                         returnStdout: true
                     ).trim()
                     
                     if (changes == "false") {
-                        echo "⏭️  No changes in ${SERVICE_DIR}/ directory. Skipping build."
+                        echo "⏭️  No changes in backend/ or helm/backend/ directories. Skipping build."
                         currentBuild.result = 'NOT_BUILT'
-                        error("No changes detected - skipping pipeline")
+                        error("No backend changes detected - skipping pipeline")
                     } else {
-                        echo "✅ Changes detected in ${SERVICE_DIR}/ directory. Proceeding with CI/CD."
+                        echo "✅ Changes detected. Proceeding with CI/CD."
                     }
                 }
             }

@@ -68,6 +68,33 @@ pipeline {
                 }
             }
         }
+        
+        stage('Check for Infrastructure Changes') {
+            steps {
+                script {
+                    echo '🔍 Checking for changes in eks-tf/ directory or Jenkinsfile.eks...'
+                    
+                    def changes = sh(
+                        script: '''
+                            if [ "${GIT_PREVIOUS_COMMIT}" = "" ]; then
+                                echo "true"
+                            else
+                                git diff --name-only ${GIT_PREVIOUS_COMMIT} ${GIT_COMMIT} | grep -E "^(eks-tf/|jenkins/Jenkinsfile.eks)" || echo "false"
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (changes == "false") {
+                        echo "⏭️  No changes in eks-tf/ directory or Jenkinsfile.eks. Skipping infrastructure deployment."
+                        currentBuild.result = 'NOT_BUILT'
+                        error("No infrastructure changes detected - skipping pipeline")
+                    } else {
+                        echo "✅ Infrastructure changes detected. Proceeding with deployment."
+                    }
+                }
+            }
+        }
 
         stage('Terraform Plan') {
             steps {
