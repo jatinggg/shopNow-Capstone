@@ -31,5 +31,17 @@ spec:
         - name: http
           containerPort: {{ .Values.deployment.containerPort }}
           protocol: TCP
+        {{- if .Values.nginx.enableConfigMap }}
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+      {{- if .Values.nginx.enableConfigMap }}
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: frontend-nginx
+      {{- end }}

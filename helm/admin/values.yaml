@@ -19,6 +19,9 @@ service:
 deployment:
   containerPort: 80
 
+nginx:
+  enableConfigMap: true
+
 resources:
   limits:
     cpu: 300m
