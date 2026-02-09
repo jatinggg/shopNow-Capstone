@@ -1,5 +1,5 @@
 # shopNow backend (Node.js API)
-#adding comment to trigger pipeline build 2
+#adding comment to trigger pipeline build 3
 FROM node:18-alpine
 
 WORKDIR /app
