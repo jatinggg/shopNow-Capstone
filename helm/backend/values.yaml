@@ -19,8 +19,8 @@ deployment:
   containerPort: 5000
 
 env:
-  - name: MONGO_URI
-    value: "mongodb://mongodb-service:27017/shopnow"
+  - name: MONGODB_URI
+    value: "mongodb://mongodb:27017/shopnow"
   - name: NODE_ENV
     value: "production"
 
